@@ -1,0 +1,79 @@
+/* Styling the WP Core Details Block to achieve Design of a Kadence Blocks Accordion Block */
+/* Styling using Kadence Global Colors and Font sizes  */
+Please note:  No FAQ Schema Mark-up  */
+
+/* Inspiration: 
+https://developer.wordpress.org/news/2023/12/01/styles-patterns-and-more-with-the-details-block/ 
+*/
+
+/* Base styling of nested blocks/elements. */
+.wp-block-details > :where( :not( summary ) ) {
+    border: 2px solid var(--global-palette1);
+    padding: 14px 16px 14px 16px;
+    border-radius: 8px;
+}
+
+/* Base styling of `summary` element */
+.wp-block-details summary {
+    margin-top: 8px;
+    padding: 14px 16px 14px 56px;
+    
+    border: 2px solid var(--global-palette1);
+    border-radius: 8px;
+
+    font-size: var(--global-kb-font-size-md);
+    font-weight: 700;
+
+    background-color: var(--global-palette9);
+    color: var(--global-palette1);
+
+    position: relative;
+
+}
+
+/* Add bottom margin to summary element to fake transition. */
+.wp-block-details[open] summary {
+    transition: all 0.3s ease-in-out;
+    margin-bottom: 8px;
+}
+
+/* Change the background and text color of the `summary` element based on state. */
+.wp-block-details[open] summary,
+.wp-block-details summary:hover,
+.wp-block-details summary:focus {
+
+    background-color: var(--global-palette1);
+    color: var(--global-palette9);
+}
+
+
+/* Remove marker and add a responsive custom marker */
+
+.wp-block-details summary::marker {
+	content: none;
+}
+
+.wp-block-details summary::after {
+    content: "+";
+    font-size: 36px;
+    font-weight: 600;
+    float: left;
+    text-align: left;
+
+    position: absolute;
+    top: 45%;
+    left: 18px; 
+    transform: translateY(-50%);
+}
+
+.wp-block-details[open] summary::after {
+	content: "−";
+}
+
+
+
+
+/* 
+Alternative opnen close symboles - not fully tested:
++− ▼▲ ◢◥﹀ ︿  ⛛. ▽△ △▽▿▾▽▷* ⤫⨯⛌ 
+*/
