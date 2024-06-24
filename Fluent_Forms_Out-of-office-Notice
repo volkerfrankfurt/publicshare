@@ -1,0 +1,33 @@
+<?php 
+// For Fluent Forms:
+// Add a sophisticated Additional You Message (e.g. Out of Office)
+// To be appended Accross All Forms on a website in front of 
+// a) Submission confirmation message
+// b) Email Notification messages
+
+
+function get_custom_message() {
+    $date = '31.07.24';
+    $message = sprintf(
+        '<h2>Out-of-office / Abwesenheit</h2>
+        <p><strong>I am out of office until / Ich bin abwesend bis zum <br>
+        <strong style="color: green;">%s</strong></strong></p>',
+        $date
+    );
+    $message .= '<br>';
+    return $message;
+}
+
+function custom_code_before_confirmation_msg_function($returnData, $form, $confirmation) {
+    $message = get_custom_message();
+    $returnData['message'] = $message . $returnData['message'];
+    return $returnData;
+}
+
+add_filter('fluentform/submission_confirmation', 'custom_code_before_confirmation_msg_function', 10, 3);
+
+add_filter('fluentform/email_body', function ($emailBody, $notification, $submittedData, $form) {
+    $message = get_custom_message();
+    $emailBody = $message . $emailBody;
+    return $emailBody;
+}, 10, 4);
