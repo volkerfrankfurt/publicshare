@@ -1,0 +1,40 @@
+//// GUTENBERG //////////////////////////////////////
+
+// Remove unneeded Gutenberg Global Styles
+// https://github.com/WordPress/gutenberg/issues/36834
+// Note: Certain Gutenberg Block basic customizations
+//       e.g. margins and padding for headings may not work anymore
+//    => Use css classes and custom CSS instead.
+
+remove_action( 'wp_enqueue_scripts', 'wp_enqueue_global_styles' );
+remove_action( 'wp_footer', 'wp_enqueue_global_styles', 1 );
+
+
+// Load only needed Gutenberg block assets
+// https://remkusdevries.com/how-to-only-load-styles-for-used-blocks/
+
+add_filter( 'should_load_separate_core_block_assets', '__return_true');
+
+
+//// KADENCE ////////////////////////////////////////
+
+// Deregister Kadence Theme Footer
+// Unneeded style sheet (if footer is replaced by Kadence Element)
+// ...themes/kadence/assets/css/footer.min.css?ver=1.2.4
+
+function deregister_kadence_footer_style() {
+    wp_deregister_style('kadence-footer');
+}
+add_action('wp_enqueue_scripts', 'deregister_kadence_footer_style', 100);
+
+
+// Deregister Kadence Blocks Deprecated Button Styles
+// Unneeded style sheet: ... /wp-content/plugins/kadence-blocks/includes/assets/css/kb-button-deprecated-style.min.css?ver=3.2.36
+// https://crunchify.com/wordpress-tip-how-to-disable-specific-plugins-stylesheet/
+
+function crunchify_remove_plugin_stylesheet() {
+    wp_dequeue_style( 'kb-button-deprecated-styles' );
+    wp_deregister_style( 'kb-button-deprecated-styles' );
+}
+add_action( 'wp_enqueue_scripts', 'crunchify_remove_plugin_stylesheet', 100 );
+
