@@ -1,3 +1,5 @@
+<?php 
+
 //// GUTENBERG //////////////////////////////////////
 
 // Remove unneeded Gutenberg Global Styles
@@ -18,12 +20,17 @@ add_filter( 'should_load_separate_core_block_assets', '__return_true');
 
 //// KADENCE ////////////////////////////////////////
 
+// Disable Kadence AI
+// NB: Speeds up page load on back-end by removing API Call on every page load.
+define('KADENCE_BLOCKS_AI_DISABLED', true);
+
+
 // Deregister Kadence Theme Footer
 // Unneeded style sheet (if footer is replaced by Kadence Element)
 // ...themes/kadence/assets/css/footer.min.css?ver=1.2.4
 
 function deregister_kadence_footer_style() {
-    wp_deregister_style('kadence-footer');
+   wp_deregister_style('kadence-footer');
 }
 add_action('wp_enqueue_scripts', 'deregister_kadence_footer_style', 100);
 
@@ -37,4 +44,18 @@ function crunchify_remove_plugin_stylesheet() {
     wp_deregister_style( 'kb-button-deprecated-styles' );
 }
 add_action( 'wp_enqueue_scripts', 'crunchify_remove_plugin_stylesheet', 100 );
+
+
+//// WPML ///////////////////////////////////////////
+
+// Dequeue the WPML Blocks Styles
+// Unneeded if language selector used in header of classic theme
+// /sitepress-multilingual-cms/dist/css/blocks/styles.css
+// https://wpml.org/forums/topic/deque-sitepress-multilingual-cms-dist-css-blocks-styles-css/
+
+add_action('wp_enqueue_scripts', 'test_remove_style', 11, 2);
+function test_remove_style() {
+  wp_dequeue_style('wpml-blocks');
+}
+
 
