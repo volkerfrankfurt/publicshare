@@ -1,0 +1,420 @@
+<?php
+
+////////////////////////////////////////////////////////////
+//////   Add Shortcuts to Posts, Pages, CPT etc.     ///////      
+////////////////////////////////////////////////////////////
+////// Inspired by // https://wordpress.stackexchange.com/questions/406113/is-there-a-way-to-add-the-list-of-recent-posts-into-the-admin-sub-menu-on-hover
+
+add_action(
+    "admin_bar_menu",
+    function ($wp_admin_bar) {
+        //////////////////////////////////////////////////////////////
+        ////// Define for which Post Type a short cut menu is created 
+        ////// For each PT, display names, icon and number of posts   
+        //////////////////////////////////////////////////////////////
+
+        $post_types_info = [
+            // edit as needed - you may also add additional post types
+            [
+                "post_type" => "post",
+                "display_name" => "Posts",
+                "icon" => "dashicons-admin-post",
+                "num_posts" => 20,
+            ],
+            [
+                "post_type" => "page",
+                "display_name" => "Pages",
+                "icon" => "dashicons-admin-page",
+                "num_posts" => 20,
+            ],
+            [
+                "post_type" => "kadence_element",
+                "display_name" => "Elements",
+                "icon" => "dashicons-screenoptions",
+                "num_posts" => 20,
+            ],
+
+            [
+                "post_type" => "kadence_cloud",
+                "display_name" => "Patterns",
+                "icon" => "dashicons-cloud",
+                "num_posts" => 20,
+            ],
+
+            // Note:  Use the post types you need and re-order
+            /*    
+
+            [
+                "post_type" => "kadence_form",
+                "display_name" => "Forms",
+                "icon" => "dashicons-list-view",
+                "num_posts" => 20,
+            ],
+
+
+            [
+                "post_type" => "kadence_query",
+                "display_name" => "Query",
+                "icon" => "dashicons-share-alt",
+                "num_posts" => 20,
+            ],
+
+
+            [
+                "post_type" => "kadence_query_card",
+                "display_name" => "Query Card",
+                "icon" => "dashicons-feedback",
+                "num_posts" => 20,
+            ],
+
+            [
+                "post_type" => "tribe_events",
+                "display_name" => "Events",
+                "icon" => "dashicons-calendar",
+                "num_posts" => 20,
+            ],
+
+            */
+        ];
+
+        //////////////////////////////////////////////
+        ////// Add Menu for the current post type    
+        //////////////////////////////////////////////
+
+        // Loop through post types
+        foreach ($post_types_info as $post_info) {
+            $post_type = $post_info["post_type"];
+            $display_name = $post_info["display_name"];
+            $icon = $post_info["icon"];
+            $num_posts = $post_info["num_posts"];
+
+            // Check if the post type exists
+            if (!post_type_exists($post_type)) {
+                continue;
+            }
+
+            // Add Menu Item on the Top Admin Bar ///////////////////
+            $wp_admin_bar->add_menu([
+                "id" => "adminbar_" . $post_type . "s",
+                "title" =>
+                    '<span class="ab-icon dashicons ' .
+                    $icon .
+                    '"></span>' .
+                    $display_name,
+                "href" =>
+                    admin_url() .
+                    "edit.php?post_type=" .
+                    $post_type .
+                    "&lang=all",
+                "meta" => ["target" => "_blank"],
+            ]);
+
+            // Add Submenu ///////////////////////////////////////////
+            // Add Link to "+ New" submenu under current post type
+            $wp_admin_bar->add_menu([
+                "id" => "submenuitem_create_" . $post_type,
+                "parent" => "adminbar_" . $post_type . "s",
+                "position" => 12,
+                "title" => "┼   New", // use Ascii 197 instead of "+" (plus symbol) to make it a bit bigger
+                "href" => admin_url() . "post-new.php?post_type=" . $post_type,
+                "meta" => ["target" => "_blank"],
+            ]);
+
+            // Add Submenu ///////////////////////////////////////////
+            // Add Link to "All Posts" submenu under current post type
+            $wp_admin_bar->add_menu([
+                "id" => "submenuitem_all_" . $post_type . "s",
+                "parent" => "adminbar_" . $post_type . "s",
+                "position" => 10,
+                "title" => "All " . $display_name,
+                "href" =>
+                    admin_url() .
+                    "edit.php?post_type=" .
+                    $post_type .
+                    "&lang=all",
+                "meta" => ["target" => "_blank"],
+            ]);
+
+            // Add Submenu for each language ///////////////////////////
+
+            ////////////////////////////////////////////////////////////
+            ////// WPML Compatibility
+            ////// If WPML is not active, calling the  icl_object_id
+            ////// causes a fatal error.
+            ////// - Therefore an if-function checks if WPML is active
+            ////// - A further if checks if the PT is translated
+            ////////////////////////////////////////////////////////////
+
+            // Check if the WPML plugin is active
+            if (function_exists("icl_object_id")) {
+                // Check if the posttpye is translated
+                $is_translated = apply_filters(
+                    "wpml_is_translated_post_type",
+                    null,
+                    $post_type
+                );
+
+                if ($is_translated) {
+                    // Get the active languages from WPML
+                    $active_languages = apply_filters(
+                        "wpml_active_languages",
+                        null,
+                        "orderby=id&order=desc"
+                    );
+
+                    // Initialize an empty array to store language codes
+                    $languages = [];
+
+                    // Loop through the active languages and extract language codes
+                    foreach ($active_languages as $language) {
+                        $languages[] = $language["code"];
+                    }
+
+                    // Use the $languages array from the WPML related code above
+
+                    foreach ($languages as $language_code) {
+                        // Add the submenu under current post type
+                        $wp_admin_bar->add_menu([
+                            "id" =>
+                                "submenuitem_recent_" .
+                                $post_type .
+                                "s_" .
+                                $language_code,
+                            "parent" => "adminbar_" . $post_type . "s",
+                            "position" => 9,
+                            "title" => sprintf(
+                                __("Recent %s", "textdomain"),
+                                strtoupper($language_code)
+                            ),
+                            "href" => admin_url(
+                                "edit.php?post_type=" .
+                                    $post_type .
+                                    "&lang=" .
+                                    $language_code
+                            ),
+                        ]);
+
+                        // Query for the most recent modified posts in the specified language
+                        $args = [
+                            "post_type" => $post_type,
+                            "post_status" => "publish",
+                            "posts_per_page" => $num_posts,
+                            "lang" => $language_code,
+                            "orderby" => "modified",
+                            "order" => "DESC",
+                        ];
+                        $recent_posts = get_posts($args);
+
+                        // Add the most recent posts as submenu items under the specified language
+                        foreach ($recent_posts as $post) {
+                            $translated_post_id = icl_object_id(
+                                $post->ID,
+                                $post_type,
+                                true,
+                                $language_code
+                            );
+
+                            if ($translated_post_id) {
+                                $translated_post = get_post(
+                                    $translated_post_id
+                                );
+
+                                if ($translated_post) {
+                                    $title = !empty(
+                                        $translated_post->post_title
+                                    )
+                                        ? $translated_post->post_title
+                                        : "<em>" .
+                                            __("Untitled", "textdomain") .
+                                            "</em>";
+                                    $wp_admin_bar->add_node([
+                                        "parent" =>
+                                            "submenuitem_recent_" .
+                                            $post_type .
+                                            "s_" .
+                                            $language_code,
+                                        "id" =>
+                                            "edit_" .
+                                            $post_type .
+                                            "_" .
+                                            $language_code .
+                                            "_" .
+                                            $translated_post->ID,
+                                        "title" => $title,
+                                        "href" => get_edit_post_link(
+                                            $translated_post->ID
+                                        ),
+                                        "meta" => ["target" => "_blank"],
+                                    ]);
+                                }
+                            }
+                        }
+                    }
+                }
+                /////////////////////////////////////////////////////////
+                //////  If PT is not translated simply create a submenu
+                ////// "All Recent Posts" for the current post type.
+                else {
+                    myFunction_submenu_no_translation($post_type, $num_posts);
+                }
+            }
+
+            /////////////////////////////////////////////////////////////
+            //////  If WPML is not active, simply create a submenu
+            ////// "All Recent Posts"  for the current post type.
+            else {
+                myFunction_submenu_no_translation($post_type, $num_posts);
+            }
+
+            ///////////////////////////////////////////////////////////////////
+            ////// Add "Recent DRAFTS (all)" submenu under current post type
+
+            $wp_admin_bar->add_menu([
+                "id" => "submenuitem_draft_" . $post_type . "s",
+                "parent" => "adminbar_" . $post_type . "s",
+                "position" => 7,
+                "title" => "Recent DRAFTS (all)",
+                "href" => admin_url(
+                    "edit.php?post_status=draft&lang=all&post_type=" .
+                        $post_type
+                ),
+            ]);
+
+            // Query for the most recent posts DRAFT status
+            $draft_args = [
+                "post_type" => $post_type,
+                "post_status" => "draft",
+                "posts_per_page" => $num_posts, // Use the specified number of posts
+                "lang" => "all",
+            ];
+
+            $recent_draft_posts = get_posts($draft_args);
+
+            // Define the maximum length for truncating the post title of DRAFTS
+            $max_title_length = 35;
+
+            // Add the most recent DRAFT posts as submenu items under "Drafts"
+            foreach ($recent_draft_posts as $post) {
+                $draft_post_id = $post->ID;
+
+                if ($draft_post_id) {
+                    $draft_post = get_post($draft_post_id);
+
+                    if ($draft_post) {
+                        // If post title empty, display "Untitled"
+                        // Truncate title if it exceeds the $max_title_length
+                        $title = !empty($draft_post->post_title)
+                            ? (strlen($draft_post->post_title) >
+                            $max_title_length
+                                ? substr(
+                                        $draft_post->post_title,
+                                        0,
+                                        $max_title_length
+                                    ) . "..."
+                                : $draft_post->post_title)
+                            : "<em>" . __("Untitled") . "</em>";
+
+                        $wp_admin_bar->add_node([
+                            "parent" => "submenuitem_draft_" . $post_type . "s",
+                            "id" =>
+                                "edit_drafts_" .
+                                $post_type .
+                                "_" .
+                                $draft_post->ID,
+                            "title" => $title,
+                            "href" => get_edit_post_link($draft_post->ID),
+                            "meta" => ["target" => "_blank"],
+                        ]);
+                    }
+                }
+            }
+
+            //////////////////////////////////////////////////////////////////
+            ////// Add Link to "Trash (all)" submenu under current post type   
+            $wp_admin_bar->add_menu([
+                "id" => "submenuitem_trash_" . $post_type . "s",
+                "parent" => "adminbar_" . $post_type . "s",
+                "position" => 6,
+                "title" => "Trash (all)",
+                "href" =>
+                    admin_url() .
+                    "edit.php?post_status=trash&post_type=" .
+                    $post_type .
+                    "&lang=all",
+                "meta" => ["target" => "_blank"],
+            ]);
+        }
+
+        /////////////////////////////////////////////
+        ////// Add Link to All Media    
+
+        $wp_admin_bar->add_node([
+            "id" => "admin_allmedia",
+            "title" => '<span class="ab-icon dashicons dashicons-admin-media"></span> Media',
+            "href" => admin_url() . "upload.php",
+            "meta" => ["target" => "_blank"],
+        ]);
+
+        $wp_admin_bar->add_node([
+            "id" => "admin_Space3",
+            "title" => " ", // Empty space
+        ]);
+    },
+    71
+);
+
+// End 
+
+
+
+//////////////////////////////////////////////////////////////////
+//// Subroutine, which is called if either WPML is not active,  //
+//// or there the post tye is not translated                    //
+//////////////////////////////////////////////////////////////////
+
+function myFunction_submenu_no_translation($post_type, $num_posts)
+{
+    global $wp_admin_bar; // Assuming $wp_admin_bar is a global variable
+
+    $wp_admin_bar->add_menu([
+        "id" => "submenuitem_recent_" . $post_type . "s",
+        "parent" => "adminbar_" . $post_type . "s",
+        "position" => 8,
+        "title" => "Recent",
+        "href" => admin_url("edit.php?post_type=" . $post_type),
+    ]);
+
+    // Query for the most recent modified posts
+    $all_args = [
+        "post_type" => $post_type,
+        "post_status" => "publish",
+        "posts_per_page" => $num_posts, // Use the specified number of posts
+        "orderby" => "modified", // Order by modification date
+        "order" => "DESC", // In descending order (latest first)
+    ];
+
+    $recent_posts = get_posts($all_args);
+
+    // Add the most recent posts as submenu items under current post type
+    foreach ($recent_posts as $post) {
+        $recent_post_id = $post->ID;
+
+        if ($recent_post_id) {
+            $recent_post = get_post($recent_post_id);
+
+            if ($recent_post) {
+                $title = !empty($recent_post->post_title)
+                    ? $recent_post->post_title
+                    : "<em>" . __("Untitled") . "</em>";
+                $wp_admin_bar->add_node([
+                    "parent" => "submenuitem_recent_" . $post_type . "s",
+                    "id" =>
+                        "edit_recent_" . $post_type . "_" . $recent_post->ID,
+                    "title" => $title,
+                    "href" => get_edit_post_link($recent_post->ID),
+                    "meta" => ["target" => "_blank"],
+                ]);
+            }
+        }
+    }
+}
