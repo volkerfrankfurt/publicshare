@@ -1,8 +1,8 @@
 <?php
-/* *************************************************************************** */ 
+/* *********************************************************************** */ 
 /*   Add dropdown filters to the Kadence Pattern Hub posts admin screen    */ 
-/*   for custom post type taxonomies "Collections" and "Categories"            */ 
-/* *************************************************************************** */ 
+/*   for custom post type taxonomies "Collections" and "Categories"        */ 
+/* *********************************************************************** */ 
 
 function add_kadence_cloud_taxonomy_filters() {
     global $typenow;
