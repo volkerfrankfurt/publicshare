@@ -1,0 +1,136 @@
+<?php
+/* *************************************************************************** */ 
+/*   Add dropdown filters to the Kadence Pattern Hub posts admin screen    */ 
+/*   for custom post type taxonomies "Collections" and "Categories"            */ 
+/* *************************************************************************** */ 
+
+function add_kadence_cloud_taxonomy_filters() {
+    global $typenow;
+    
+    // Only add filters on the kadence_cloud post type admin screen
+    if ($typenow !== 'kadence_cloud') {
+        return;
+    }
+    
+    // Array of taxonomies to create dropdowns for
+    $taxonomies = array(
+        'kadence-cloud-collections' => __('All Collections', 'kadence-cloud'),
+        'kadence-cloud-categories'  => __('All Categories', 'kadence-cloud')
+    );
+    
+    foreach ($taxonomies as $taxonomy => $all_label) {
+        // Check if taxonomy exists
+        if (!taxonomy_exists($taxonomy)) {
+            continue;
+        }
+        
+        // Get current selected value
+        $selected = isset($_GET[$taxonomy]) ? sanitize_text_field($_GET[$taxonomy]) : '';
+        
+        // Get taxonomy object
+        $tax_obj = get_taxonomy($taxonomy);
+        
+        // Get all terms for this taxonomy
+        $terms = get_terms(array(
+            'taxonomy'   => $taxonomy,
+            'hide_empty' => true,
+            'orderby'    => 'name',
+            'order'      => 'ASC'
+        ));
+        
+        // Skip if no terms found
+        if (empty($terms) || is_wp_error($terms)) {
+            continue;
+        }
+        
+        // Output the dropdown
+        echo '<select name="' . esc_attr($taxonomy) . '" id="' . esc_attr($taxonomy) . '">';
+        echo '<option value="">' . esc_html($all_label) . '</option>';
+        
+        foreach ($terms as $term) {
+            $term_selected = selected($selected, $term->slug, false);
+            echo '<option value="' . esc_attr($term->slug) . '"' . $term_selected . '>';
+            echo esc_html($term->name) . ' (' . $term->count . ')';
+            echo '</option>';
+        }
+        
+        echo '</select>';
+    }
+}
+add_action('restrict_manage_posts', 'add_kadence_cloud_taxonomy_filters');
+
+
+/**  Modify the query to filter by selected taxonomies    */
+
+function filter_kadence_cloud_by_taxonomies($query) {
+    global $pagenow, $typenow;
+    
+    // Only apply on admin post list page for kadence_cloud post type
+    if (!is_admin() || $pagenow !== 'edit.php' || $typenow !== 'kadence_cloud') {
+        return;
+    }
+    
+    // Array of taxonomies to check (keywords removed)
+    $taxonomies = array(
+        'kadence-cloud-collections',
+        'kadence-cloud-categories'
+    );
+    
+    foreach ($taxonomies as $taxonomy) {
+        // Check if this taxonomy filter is being used
+        if (isset($_GET[$taxonomy]) && !empty($_GET[$taxonomy])) {
+            $term_slug = sanitize_text_field($_GET[$taxonomy]);
+            
+            // Get the term object
+            $term = get_term_by('slug', $term_slug, $taxonomy);
+            
+            if ($term) {
+                // Add tax_query to the main query
+                $tax_query = $query->get('tax_query') ?: array();
+                
+                $tax_query[] = array(
+                    'taxonomy' => $taxonomy,
+                    'field'    => 'slug',
+                    'terms'    => $term_slug,
+                );
+                
+                $query->set('tax_query', $tax_query);
+            }
+        }
+    }
+}
+add_action('pre_get_posts', 'filter_kadence_cloud_by_taxonomies');
+
+
+/**  The following is optional                           */
+/**  Clear filters functionality (optional enhancement)  */
+function add_kadence_cloud_clear_filters_button() {
+    global $typenow;
+    
+    if ($typenow !== 'kadence_cloud') {
+        return;
+    }
+    
+    // Check if any filters are active (keywords removed)
+    $active_filters = array();
+    $taxonomies = array('kadence-cloud-collections', 'kadence-cloud-categories');
+    
+    foreach ($taxonomies as $taxonomy) {
+        if (isset($_GET[$taxonomy]) && !empty($_GET[$taxonomy])) {
+            $active_filters[] = $taxonomy;
+        }
+    }
+    
+    // Show clear filters button if filters are active
+    if (!empty($active_filters)) {
+        $clear_url = admin_url('edit.php?post_type=kadence_cloud');
+        echo '<script>
+        jQuery(document).ready(function($) {
+            $(".tablenav.top .tablenav-pages").before(
+                "<div class=\"alignleft actions\"><a href=\"' . esc_url($clear_url) . '\" class=\"button\">Clear Filters</a></div>"
+            );
+        });
+        </script>';
+    }
+}
+add_action('admin_footer', 'add_kadence_cloud_clear_filters_button');
