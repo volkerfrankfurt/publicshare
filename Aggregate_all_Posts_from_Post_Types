@@ -1,0 +1,337 @@
+// Note:  You must update the lines noted with "UPDATE THESE" (Lines 51 and 222)  with the names of the Post Types you want to aggregate  
+
+
+
+// 1. Register the post type with taxonomy support
+function register_slider_aggregate_post_type() {
+    $labels = array(
+        'name' => 'Slider Posts',
+        'singular_name' => 'Slider Post',
+        'menu_name' => 'Slider Posts',
+        'all_items' => 'All Slider Posts',
+    );
+
+    $args = array(
+        'labels' => $labels,
+        'public' => true,
+        'publicly_queryable' => true,
+        'show_ui' => true,
+        'show_in_menu' => true,
+        'show_in_rest' => true,
+        'rest_base' => 'slider-posts',
+        'query_var' => true,
+        'rewrite' => array('slug' => 'slider-posts'),
+        'capability_type' => 'post',
+        'has_archive' => false,
+        'hierarchical' => false,
+        'menu_position' => 20,
+        'menu_icon' => 'dashicons-images-alt2',
+        'supports' => array('title', 'editor', 'thumbnail', 'excerpt', 'custom-fields', 'revisions'),
+        'taxonomies' => array('category', 'post_tag') // Add taxonomy support
+    );
+
+    register_post_type('slider_aggregate', $args);
+}
+add_action('init', 'register_slider_aggregate_post_type');
+
+// 2. Register taxonomies for slider_aggregate post type (if not already registered)
+add_action('init', 'register_slider_aggregate_taxonomies');
+
+function register_slider_aggregate_taxonomies() {
+    // Register category taxonomy for slider_aggregate
+    register_taxonomy_for_object_type('category', 'slider_aggregate');
+    
+    // Register post_tag taxonomy for slider_aggregate
+    register_taxonomy_for_object_type('post_tag', 'slider_aggregate');
+}
+
+// 3. Complete implementation of the aggregation function
+function populate_slider_aggregate() {
+    // Replace these with your actual post types
+    $source_post_types = array('post', 'product'); // UPDATE THESE!
+    
+    // Get all posts from source post types
+    $source_posts = get_posts(array(
+        'post_type' => $source_post_types,
+        'numberposts' => -1,
+        'post_status' => 'publish'
+    ));
+    
+    if (empty($source_posts)) {
+        error_log('No source posts found for post types: ' . implode(', ', $source_post_types));
+        return;
+    }
+    
+    foreach ($source_posts as $source_post) {
+        create_or_update_aggregate_post($source_post);
+    }
+    
+    error_log('Populated ' . count($source_posts) . ' aggregate posts');
+}
+
+// 4. Function to create or update individual aggregate posts
+function create_or_update_aggregate_post($source_post) {
+    // Check if aggregate post already exists
+    $existing_aggregate = get_posts(array(
+        'post_type' => 'slider_aggregate',
+        'meta_key' => 'source_post_id',
+        'meta_value' => $source_post->ID,
+        'numberposts' => 1,
+        'post_status' => 'any'
+    ));
+    
+    // Prepare aggregate post data
+    $aggregate_data = array(
+        'post_title' => $source_post->post_title,
+        'post_content' => $source_post->post_content,
+        'post_excerpt' => $source_post->post_excerpt,
+        'post_status' => $source_post->post_status,
+        'post_type' => 'slider_aggregate',
+        'post_date' => $source_post->post_date,
+        'post_date_gmt' => $source_post->post_date_gmt,
+    );
+    
+    if (!empty($existing_aggregate)) {
+        // Update existing aggregate post
+        $aggregate_data['ID'] = $existing_aggregate[0]->ID;
+        $result = wp_update_post($aggregate_data);
+        $aggregate_id = $existing_aggregate[0]->ID;
+    } else {
+        // Create new aggregate post
+        $aggregate_id = wp_insert_post($aggregate_data);
+        $result = $aggregate_id;
+    }
+    
+    if (is_wp_error($result) || !$result) {
+        error_log('Failed to create/update aggregate post for source ID: ' . $source_post->ID);
+        return false;
+    }
+    
+    // Update metadata
+    update_post_meta($aggregate_id, 'source_post_id', $source_post->ID);
+    update_post_meta($aggregate_id, 'source_post_type', $source_post->post_type);
+    
+    // Copy featured image if it exists
+    $featured_image_id = get_post_thumbnail_id($source_post->ID);
+    if ($featured_image_id) {
+        set_post_thumbnail($aggregate_id, $featured_image_id);
+    }
+    
+    // Copy taxonomies
+    copy_post_taxonomies($source_post->ID, $aggregate_id, $source_post->post_type);
+    
+    // Copy custom fields if needed
+    $custom_fields = get_post_meta($source_post->ID);
+    foreach ($custom_fields as $key => $values) {
+        // Skip private fields and our own source fields
+        if (substr($key, 0, 1) !== '_' && !in_array($key, ['source_post_id', 'source_post_type'])) {
+            delete_post_meta($aggregate_id, $key);
+            foreach ($values as $value) {
+                add_post_meta($aggregate_id, $key, $value);
+            }
+        }
+    }
+    
+    return $aggregate_id;
+}
+
+// 5. Function to copy taxonomies from source post to aggregate post
+function copy_post_taxonomies($source_post_id, $aggregate_post_id, $source_post_type) {
+    // Define taxonomy mapping - adjust these based on your needs
+    $taxonomy_mappings = array(
+        'post' => array(
+            'category' => 'category',
+            'post_tag' => 'post_tag'
+        ),
+        'product' => array(
+            'product_cat' => 'category',    // Map product categories to standard categories
+            'product_tag' => 'post_tag'     // Map product tags to standard tags
+        )
+    );
+    
+    // Get the taxonomy mapping for this source post type
+    if (!isset($taxonomy_mappings[$source_post_type])) {
+        // If no mapping defined, try to copy standard taxonomies
+        $source_taxonomies = array('category', 'post_tag');
+        $target_taxonomies = array('category', 'post_tag');
+    } else {
+        $source_taxonomies = array_keys($taxonomy_mappings[$source_post_type]);
+        $target_taxonomies = array_values($taxonomy_mappings[$source_post_type]);
+    }
+    
+    // Clear existing taxonomy terms for the aggregate post
+    wp_delete_object_term_relationships($aggregate_post_id, array('category', 'post_tag'));
+    
+    // Copy each taxonomy
+    foreach ($source_taxonomies as $index => $source_taxonomy) {
+        $target_taxonomy = isset($target_taxonomies[$index]) ? $target_taxonomies[$index] : $source_taxonomy;
+        
+        // Get terms from source post
+        $terms = wp_get_post_terms($source_post_id, $source_taxonomy, array('fields' => 'ids'));
+        
+        if (!is_wp_error($terms) && !empty($terms)) {
+            // If we're mapping from one taxonomy to another (e.g., product_cat to category)
+            if ($source_taxonomy !== $target_taxonomy) {
+                $target_term_ids = array();
+                
+                foreach ($terms as $term_id) {
+                    $source_term = get_term($term_id, $source_taxonomy);
+                    if (!is_wp_error($source_term)) {
+                        // Try to find existing term in target taxonomy
+                        $existing_term = get_term_by('name', $source_term->name, $target_taxonomy);
+                        
+                        if (!$existing_term) {
+                            // Create new term in target taxonomy
+                            $new_term = wp_insert_term(
+                                $source_term->name,
+                                $target_taxonomy,
+                                array(
+                                    'description' => $source_term->description,
+                                    'slug' => $source_term->slug
+                                )
+                            );
+                            
+                            if (!is_wp_error($new_term)) {
+                                $target_term_ids[] = $new_term['term_id'];
+                            }
+                        } else {
+                            $target_term_ids[] = $existing_term->term_id;
+                        }
+                    }
+                }
+                
+                // Assign the mapped terms
+                if (!empty($target_term_ids)) {
+                    wp_set_post_terms($aggregate_post_id, $target_term_ids, $target_taxonomy, true);
+                }
+            } else {
+                // Direct assignment for same taxonomy
+                wp_set_post_terms($aggregate_post_id, $terms, $target_taxonomy, true);
+            }
+            
+            error_log("Copied {$source_taxonomy} to {$target_taxonomy} for aggregate post {$aggregate_post_id}: " . count($terms) . " terms");
+        }
+    }
+}
+
+// 6. Real-time updates on post save/update
+add_action('save_post', 'update_aggregate_on_post_save', 10, 3);
+
+function update_aggregate_on_post_save($post_id, $post, $update) {
+    // Replace with your actual post types
+    $source_post_types = array('post', 'product'); // UPDATE THESE!
+    
+    // Only proceed for your target post types
+    if (!in_array($post->post_type, $source_post_types)) {
+        return;
+    }
+    
+    // Skip if it's an autosave or revision
+    if (wp_is_post_autosave($post_id) || wp_is_post_revision($post_id)) {
+        return;
+    }
+    
+    // Skip if it's our own aggregate post type (prevent loops)
+    if ($post->post_type === 'slider_aggregate') {
+        return;
+    }
+    
+    error_log('Updating aggregate for post ID: ' . $post_id . ' of type: ' . $post->post_type);
+    
+    // Update or create corresponding aggregate post
+    create_or_update_aggregate_post($post);
+}
+
+// 7. Handle post deletion
+add_action('delete_post', 'update_aggregate_on_post_delete');
+
+function update_aggregate_on_post_delete($post_id) {
+    // Find and delete corresponding aggregate post
+    $aggregate_posts = get_posts(array(
+        'post_type' => 'slider_aggregate',
+        'meta_key' => 'source_post_id',
+        'meta_value' => $post_id,
+        'numberposts' => 1,
+        'post_status' => 'any'
+    ));
+    
+    if (!empty($aggregate_posts)) {
+        wp_delete_post($aggregate_posts[0]->ID, true);
+        error_log('Deleted aggregate post for source ID: ' . $post_id);
+    }
+}
+
+// 8. Manual trigger for initial population and debugging
+add_action('admin_menu', 'add_aggregate_admin_menu');
+
+function add_aggregate_admin_menu() {
+    add_management_page(
+        'Slider Aggregate',
+        'Refresh Slider Data',
+        'manage_options',
+        'refresh-slider-aggregate',
+        'refresh_slider_aggregate_page'
+    );
+}
+
+function refresh_slider_aggregate_page() {
+    if (isset($_POST['refresh_aggregate'])) {
+        // Clear existing aggregate posts first
+        $existing_aggregates = get_posts(array(
+            'post_type' => 'slider_aggregate',
+            'numberposts' => -1,
+            'post_status' => 'any'
+        ));
+        
+        foreach($existing_aggregates as $post) {
+            wp_delete_post($post->ID, true);
+        }
+        
+        // Repopulate
+        populate_slider_aggregate();
+        
+        echo '<div class="notice notice-success"><p>Slider aggregate refreshed! Check the posts below.</p></div>';
+    }
+    
+    // Show current aggregate posts
+    $current_aggregates = get_posts(array(
+        'post_type' => 'slider_aggregate',
+        'numberposts' => 10,
+        'post_status' => 'any'
+    ));
+    
+    echo '<div class="wrap">';
+    echo '<h1>Refresh Slider Aggregate</h1>';
+    echo '<form method="post">';
+    wp_nonce_field('refresh_aggregate_action', 'refresh_aggregate_nonce');
+    echo '<input type="submit" name="refresh_aggregate" class="button-primary" value="Refresh Now">';
+    echo '</form>';
+    
+    echo '<h2>Current Aggregate Posts (' . count($current_aggregates) . ')</h2>';
+    if (!empty($current_aggregates)) {
+        echo '<ul>';
+        foreach ($current_aggregates as $agg_post) {
+            $source_id = get_post_meta($agg_post->ID, 'source_post_id', true);
+            $source_type = get_post_meta($agg_post->ID, 'source_post_type', true);
+            
+            // Get taxonomy info for display
+            $categories = wp_get_post_terms($agg_post->ID, 'category', array('fields' => 'names'));
+            $tags = wp_get_post_terms($agg_post->ID, 'post_tag', array('fields' => 'names'));
+            
+            $taxonomy_info = '';
+            if (!empty($categories)) {
+                $taxonomy_info .= ' | Categories: ' . implode(', ', $categories);
+            }
+            if (!empty($tags)) {
+                $taxonomy_info .= ' | Tags: ' . implode(', ', $tags);
+            }
+            
+            echo '<li><strong>' . $agg_post->post_title . '</strong> (ID: ' . $agg_post->ID . ') - Source: ' . $source_type . ' #' . $source_id . $taxonomy_info . '</li>';
+        }
+        echo '</ul>';
+    } else {
+        echo '<p>No aggregate posts found.</p>';
+    }
+    
+    echo '</div>';
+}
