@@ -71,8 +71,11 @@ https://developer.wordpress.org/news/2023/12/01/styles-patterns-and-more-with-th
 	content: "−";
 }
 
+/* Hide Pane if Empty - e.g. when filling the pane dynamically with Kandence Dynamic HTML Block */
 
-
+.wp-block-details:has(> summary):not(:has(:not(summary):not(:empty))) {
+    display: none;
+  }
 
 /* 
 Alternative opnen close symboles - not fully tested:
