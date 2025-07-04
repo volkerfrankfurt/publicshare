@@ -10,7 +10,7 @@ https://developer.wordpress.org/news/2023/12/01/styles-patterns-and-more-with-th
 /* Base styling of nested blocks/elements. */
 .wp-block-details > :where( :not( summary ) ) {
     border: 2px solid var(--global-palette1);
-    padding: 14px 16px 14px 16px;
+    padding: 14px 16px 14px 16px !important;
     border-radius: 8px;
 }
 
