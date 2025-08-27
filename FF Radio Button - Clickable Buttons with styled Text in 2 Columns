@@ -3,7 +3,9 @@
 /*  1. Create a default radio button            */
 /*  2  Put under Radio Buttons Advanced / Container Class: ff_button_style   */
 /*  3. Add HTML containing the custom css classs "artist-card"               */ 
+/*  4. Add the following Custom CSS under the respective Fluent Forms Form   */
 
+/*  Sample Custom HTML:                                                             */
 /*  Radio Button Content - Put HTML into the individual Radio Buttons - Example: */
 /*  <div class="artist-card">   
     <h4>Erik A</h4>   
