@@ -1,0 +1,276 @@
+<?php
+
+// [Debugging] Memory Use & Scripts & Styles
+
+//  IMPORTANT: Please switch off any caching to get meaningful numbers.
+
+//  Note: Please reload pages several times to get rid of artefacts of initial loading. 
+//  Output displayed in Header and Footer.  Scroll down for 2 additional 
+//  Measurements on the Frontend and a List of loaded Scripts and Styles.
+
+
+function show_memory_usage() {
+    global $wpdb, $wp_scripts, $wp_styles;
+    
+    // Get both allocated and actual memory usage
+    $usage_allocated = number_format(memory_get_usage(true) / 1024 / 1024, 1);
+    $usage_actual = number_format(memory_get_usage(false) / 1024 / 1024, 1);
+    $peak_allocated = number_format(memory_get_peak_usage(true) / 1024 / 1024, 1);
+    $peak_actual = number_format(memory_get_peak_usage(false) / 1024 / 1024, 1);
+   
+    // Count enqueued scripts and styles
+    $scripts_count = 0;
+    $styles_count = 0;
+    $inline_styles = 0;
+    $external_styles = 0;
+    $duplicates_excluded = 0;
+    
+    // Store lists for debugging
+    global $debug_styles_counted, $debug_styles_duplicates, $debug_styles_inline, $debug_scripts_loaded;
+    $debug_styles_counted = array();
+    $debug_styles_duplicates = array();
+    $debug_styles_inline = array();
+    $debug_scripts_loaded = array();
+    
+    if (is_object($wp_scripts)) {
+        if (isset($wp_scripts->done) && !empty($wp_scripts->done)) {
+            $scripts_count = count($wp_scripts->done);
+            // Store script handles for debug
+            foreach ($wp_scripts->done as $handle) {
+                if (isset($wp_scripts->registered[$handle])) {
+                    $debug_scripts_loaded[] = array(
+                        'handle' => $handle,
+                        'src' => $wp_scripts->registered[$handle]->src
+                    );
+                }
+            }
+        } elseif (isset($wp_scripts->queue) && !empty($wp_scripts->queue)) {
+            $scripts_count = count($wp_scripts->queue);
+        }
+    }
+    
+    if (is_object($wp_styles) && isset($wp_styles->done)) {
+        $seen_urls = array(); // Track unique URLs to avoid counting duplicates
+        
+        // Only check styles that are in the done array
+        foreach ($wp_styles->done as $handle) {
+            // Make sure the handle is still registered
+            if (isset($wp_styles->registered[$handle]) && 
+                is_object($wp_styles->registered[$handle])) {
+                
+                $style = $wp_styles->registered[$handle];
+                
+                // Check if it has an external source file
+                if (!empty($style->src)) {
+                    // Get the full URL to check for duplicates
+                    $style_url = $style->src;
+                    
+                    // Only count if we haven't seen this URL before
+                    if (!in_array($style_url, $seen_urls)) {
+                        $seen_urls[] = $style_url;
+                        $external_styles++;
+                        $debug_styles_counted[] = array(
+                            'handle' => $handle,
+                            'src' => $style_url
+                        );
+                        
+                        // Only count inline if there's inline content
+                        if ((!empty($style->extra['after']) && is_array($style->extra['after'])) || 
+                            (!empty($style->extra['before']) && is_array($style->extra['before']))) {
+                            $inline_styles++;
+                            $debug_styles_inline[] = $handle;
+                        }
+                    } else {
+                        // This is a duplicate
+                        $duplicates_excluded++;
+                        $debug_styles_duplicates[] = $handle . ' (duplicate of: ' . $style_url . ')';
+                    }
+                }
+            }
+        }
+        
+        $styles_count = count($wp_styles->done);
+    }
+    
+    // Get database queries count
+    $queries = function_exists('get_num_queries') ? get_num_queries() : 0;
+    
+    // Determine measurement point
+    $measurement_point = '';
+    $current_action = current_action();
+    if ($current_action === 'wp_head') {
+        $measurement_point = 'MEASUREMENT: After Header (wp_head)';
+    } elseif ($current_action === 'wp_footer') {
+        $measurement_point = 'MEASUREMENT: After Footer (wp_footer)';
+    } elseif ($current_action === 'shutdown') {
+        $measurement_point = 'MEASUREMENT: Final (shutdown)';
+    }
+
+    $output = "<div style='font-size:12px;color:#0f0;background:#000;
+                display:inline-block;padding:4px 8px;border-radius:4px;
+                margin:10px;line-height:1.6;z-index:99999;position:relative;'>";
+    
+    if ($measurement_point) {
+        $output .= "<strong>{$measurement_point}</strong><br>";
+    }
+    
+    $output .= "Memory Usage - Allocated: {$usage_allocated} MB | Actual: {$usage_actual} MB<br>
+                Memory Peak - Allocated: {$peak_allocated} MB | Actual: {$peak_actual} MB<br>
+                <span style='font-size:10px;color:#888;'>Note: Allocated memory is reserved by PHP, actual memory is used by the script</span><br>
+                Scripts: {$scripts_count} | Styles: {$external_styles}";
+    
+    if ($inline_styles > 0) {
+        $output .= " (+{$inline_styles} inline)";
+    }
+    
+    if ($duplicates_excluded > 0) {
+        $output .= "<br>Duplicates excluded: {$duplicates_excluded}";
+    }
+    
+    $output .= "<br>DB Queries: {$queries}
+            </div>";
+    
+    echo $output;
+}
+
+// Helper function to get file size
+function get_file_size_from_url($url) {
+    // Convert relative URLs to absolute paths
+    if (strpos($url, 'http') !== 0) {
+        $upload_dir = wp_upload_dir();
+        $base_url = home_url();
+        
+        // Try to construct absolute path
+        if (strpos($url, '/wp-content/') !== false) {
+            $relative_path = substr($url, strpos($url, '/wp-content/'));
+            $file_path = ABSPATH . ltrim($relative_path, '/');
+        } elseif (strpos($url, '/wp-includes/') !== false) {
+            $relative_path = substr($url, strpos($url, '/wp-includes/'));
+            $file_path = ABSPATH . ltrim($relative_path, '/');
+        } else {
+            return 'N/A';
+        }
+        
+        if (file_exists($file_path)) {
+            $size = filesize($file_path);
+            return format_file_size($size);
+        }
+        return 'N/A';
+    }
+    
+    // For external URLs (starts with http), use remote file size check
+    $full_url = $url;
+    if (strpos($url, '//') === 0) {
+        $full_url = 'https:' . $url;
+    }
+    
+    // Use WordPress HTTP API to get headers
+    $response = wp_remote_head($full_url, array(
+        'timeout' => 5,
+        'sslverify' => false
+    ));
+    
+    if (is_wp_error($response)) {
+        return 'Error';
+    }
+    
+    $content_length = wp_remote_retrieve_header($response, 'content-length');
+    
+    if ($content_length) {
+        return format_file_size($content_length);
+    }
+    
+    return 'Unknown';
+}
+
+// Helper function to format file size
+function format_file_size($bytes) {
+    if ($bytes >= 1048576) {
+        return round($bytes / 1048576, 2) . ' MB';
+    } elseif ($bytes >= 1024) {
+        return round($bytes / 1024, 2) . ' KB';
+    } else {
+        return $bytes . ' B';
+    }
+}
+
+// DEBUG: Show detailed style and script breakdown (visible to all users)
+add_action('wp_footer', function() {
+    global $debug_styles_counted, $debug_styles_duplicates, $debug_styles_inline, $debug_scripts_loaded;
+    
+    echo '<div style="background:#fff3cd;color:#856404;padding:15px;margin:10px;font-size:11px;
+                max-width:100%;overflow:auto;border:2px solid #ffc107;border-radius:5px; z-index:99999; position:relative;">';
+    
+    echo '<strong style="font-size:13px;">SCRIPTS & STYLES DEBUG INFO - Similar to Chrome Inspector </strong><hr style="margin:10px 0;">';
+    
+    // Scripts section
+    echo '<strong style="font-size:12px;">⚙️ SCRIPTS LOADED (' . count($debug_scripts_loaded) . '):</strong><br>';
+    if (!empty($debug_scripts_loaded)) {
+        $total_script_size = 0;
+        foreach ($debug_scripts_loaded as $index => $script) {
+            $size = get_file_size_from_url($script['src']);
+            echo ($index + 1) . '. ' . $script['handle'] . ' <span style="color:#666;">(' . $size . ')</span><br>';
+        }
+    } else {
+        echo '<em>None</em><br>';
+    }
+    
+    echo '<br><hr style="margin:10px 0;">';
+    
+    // A) Counted styles
+    echo '<strong style="font-size:12px;">✅ A) COUNTED EXTERNAL STYLES (' . count($debug_styles_counted) . '):</strong><br>';
+    if (!empty($debug_styles_counted)) {
+        $total_style_size = 0;
+        foreach ($debug_styles_counted as $index => $style) {
+            $size = get_file_size_from_url($style['src']);
+            echo ($index + 1) . '. ' . $style['handle'] . ' <span style="color:#666;">(' . $size . ')</span><br>';
+        }
+    } else {
+        echo '<em>None</em><br>';
+    }
+    
+    echo '<br>';
+    
+    // B) Duplicates excluded
+    echo '<strong>🚫 B) DUPLICATES EXCLUDED (' . count($debug_styles_duplicates) . '):</strong><br>';
+    if (!empty($debug_styles_duplicates)) {
+        foreach ($debug_styles_duplicates as $index => $info) {
+            echo ($index + 1) . '. ' . $info . '<br>';
+        }
+    } else {
+        echo '<em>None</em><br>';
+    }
+    
+    echo '<br>';
+    
+    // C) Inline styles
+    echo '<strong>📝 C) INLINE STYLES (' . count($debug_styles_inline) . '):</strong><br>';
+    if (!empty($debug_styles_inline)) {
+        foreach ($debug_styles_inline as $index => $handle) {
+            echo ($index + 1) . '. ' . $handle . '<br>';
+        }
+    } else {
+        echo '<em>None</em><br>';
+    }
+    
+    echo '</div>';
+}, 1001);
+
+// Disable caching for this function
+add_action('init', function() {
+    if (!is_admin()) {
+        header('Cache-Control: no-cache, must-revalidate, max-age=0');
+    }
+}, 1);
+
+// Automatically display above header
+add_action('wp_head', 'show_memory_usage', 999);
+
+// Automatically display after footer
+add_action('wp_footer', 'show_memory_usage', 999);
+
+// Add this to see memory at the very end
+add_action('shutdown', 'show_memory_usage', 999);
+
+// Shortcode functionality
+add_shortcode('memory_usage', 'show_memory_usage');
