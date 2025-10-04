@@ -23,8 +23,8 @@ function add_author_update_after_content($content)
         $style_added = true;
     }
 
-    // WPML language detection
-    $lang = defined('ICL_LANGUAGE_CODE') ? ICL_LANGUAGE_CODE : 'en';
+    // Check Polylang first, then WPML, then default to 'en'
+    $lang = function_exists('pll_current_language') ? pll_current_language() : (defined('ICL_LANGUAGE_CODE') ? ICL_LANGUAGE_CODE : 'en');
     
     // Get last modified date with language-specific format
     if ($lang === 'de') {
