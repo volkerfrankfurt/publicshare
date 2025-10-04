@@ -1,0 +1,54 @@
+function add_author_update_after_content($content)
+{ 
+    // Only run on single posts (not pages or archives)
+    if (!is_single()) {
+        return $content;
+    }
+
+    // Check if sidebar layout is set to 'right' for this specific post
+    $post_layout = get_post_meta(get_the_ID(), '_kad_post_layout', true);
+    
+    // Only proceed if layout is exactly 'right'
+    if ($post_layout !== 'right') {
+        return $content;
+    }
+
+    // Add CSS inline (only once)
+    static $style_added = false;
+    if (!$style_added) {
+        echo '<style>.vmd-font-weight { font-weight: 500; }</style>';
+        $style_added = true;
+    }
+
+    // WPML language detection
+    $lang = defined('ICL_LANGUAGE_CODE') ? ICL_LANGUAGE_CODE : 'en';
+    
+    // Get last modified date with language-specific format
+    if ($lang === 'de') {
+        $modified_date = get_the_modified_date('j. F Y');
+        $author_label = 'Autor';
+        $updated_label = 'Aktualisiert';
+    } else {
+        $modified_date = get_the_modified_date('F j, Y');
+        $author_label = 'Author';
+        $updated_label = 'Updated';
+    }
+
+    // Author/Update HTML
+    $author_update_html = '
+    <div style="display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin-top: 24px; width: 100%; border: 1px solid var(--global-palette1); border-radius: 8px;">
+      <div style="flex: 0 0 auto;">
+        <img src="https://traumaintegration.de/wp-content/uploads/2024/05/Volker-Dammann-Coaching-Frankfurt-am-Main-EN-150x150.webp" 
+             alt="Volker Dammann" width="42" height="42">
+      </div>
+      <div style="display: flex; flex-direction: column; justify-content: center;">
+        <div class="vmd-font-weight">' . $author_label . ': Volker Dammann</div>
+        <div class="vmd-font-weight">' . $updated_label . ': ' . $modified_date . '</div>
+      </div>
+    </div>';
+
+    $content .= $author_update_html;
+
+    return $content;
+}
+add_filter('the_content', 'add_author_update_after_content');
